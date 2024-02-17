@@ -7,6 +7,12 @@ name = "vision_lab"
 version = "0.0.0"
 dependencies = [
   "numpy",
+  "pillow",
+  "scipy",
+  "torch",
+  "torchvision",
+  "transformers>=4.35.2",  # OwlViT
+  "real-robot",  # logger
 ]
 requires-python = ">=3.8"
 description = "Collection of computer vision tools"

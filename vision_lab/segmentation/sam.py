@@ -1,3 +1,4 @@
+# python3 -m pip install git+https://github.com/facebookresearch/segment-anything.git
 from pathlib import Path
 from typing import List, Tuple, Union
 
