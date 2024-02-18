@@ -23,7 +23,6 @@ class BundleSDF:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/BundleSDF",
         model_variant="default",
         run_name="debug_run",
         feature_size=256,
@@ -43,7 +42,10 @@ class BundleSDF:
         :param save_results: save results to debug_dir (might need verbose_level == 2)
         :param use_gui: whether to show gui
         """
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint/config locally: prev in /rl_benchmark/BundleSDF"
+        )
+
         self.checkpoint = root_path / self.LOFTR_CHECKPOINTS[model_variant]
         self.model_variant = model_variant
         # Create output directory

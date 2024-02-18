@@ -22,7 +22,6 @@ class XMem:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/XMem",
         model_variant="default",
         top_k=30,
         mem_every=5,
@@ -53,7 +52,10 @@ class XMem:
                                        disappear for a long time
         :param num_trackers: number of mask trackers (same as input batch_size)
         """
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint locally: prev in /rl_benchmark/XMem"
+        )
+
         self.checkpoint = root_path / self.CHECKPOINTS[model_variant]
         self.model_variant = model_variant
 

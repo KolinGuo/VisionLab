@@ -159,7 +159,6 @@ class TAPIR:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/tapnet",
         model_variant="causal",
         resize_shape=(256, 256),
         num_points=64,
@@ -169,7 +168,10 @@ class TAPIR:
         :param resize_shape: Resize input frames to this size, [H, W]
         :param num_points: Number of tracking points
         """
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint locally: prev in /rl_benchmark/tapnet/checkpoints"
+        )
+
         self.checkpoint = root_path / self.CHECKPOINTS[model_variant]
         self.model_variant = model_variant
 

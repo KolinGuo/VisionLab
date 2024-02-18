@@ -80,7 +80,6 @@ class Owl_ViT:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark",
         model_variant="google/owlv2-large-patch14-ensemble",
         box_threshold=0.1,
         nms_threshold=1.0,
@@ -90,7 +89,6 @@ class Owl_ViT:
         :param box_threshold: filtering threshold for bbox
         :param nms_threshold: NMS IoU threshold (1.0 is no NMS)
         """
-        root_path = Path(root_path)
         assert model_variant in self.VARIANTS, f"Unknown {model_variant = }"
         self.model_variant = model_variant
         self.is_v2 = "v2" in model_variant

@@ -15,7 +15,6 @@ class TAPIRPoseTracker:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/tapnet",
         model_variant="causal",
         resize_shape=(256, 256),
         num_points=64,
@@ -31,9 +30,12 @@ class TAPIRPoseTracker:
         :param run_name: directory name under root_path for saving debug info.
         :param verbose_level: logging verbose level for BundleTrack (max=2)
         """
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint/config locally: prev in /rl_benchmark/tapnet"
+        )
+
         self.point_tracker = TAPIR(
-            root_path, model_variant, resize_shape, num_points, device=device
+            model_variant, resize_shape, num_points, device=device
         )
 
         self.checkpoint = self.point_tracker.checkpoint

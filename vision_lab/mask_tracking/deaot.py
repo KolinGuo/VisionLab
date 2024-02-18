@@ -19,7 +19,6 @@ class DeAoT:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/seg-and-track-anything",
         model_variant="swinb_deaotl",
         aot_max_len_long_term=10,
         num_trackers=1,
@@ -29,7 +28,10 @@ class DeAoT:
         :param aot_max_len_long_term: maximum number of long-term key frames
         :param num_trackers: number of mask trackers (same as input batch_size)
         """
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint locally: prev in /rl_benchmark/seg-and-track-anything"
+        )
+
         self.checkpoint = root_path / self.CHECKPOINTS[model_variant]
         self.model_variant = model_variant
 

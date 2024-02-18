@@ -22,11 +22,13 @@ class SAM:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/grounded-sam",
         model_variant="vit_h",
         device="cuda",
     ):
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint locally: prev in /rl_benchmark/grounded-sam"
+        )
+
         self.checkpoint = root_path / self.CHECKPOINTS[model_variant]
         self.model_variant = model_variant
 

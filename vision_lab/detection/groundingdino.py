@@ -92,7 +92,6 @@ class GroundingDINO:
 
     def __init__(
         self,
-        root_path: Union[str, Path] = "/rl_benchmark/grounded-sam",
         model_variant="swin-b",
         box_threshold=0.3,
         text_threshold=0.25,
@@ -102,7 +101,10 @@ class GroundingDINO:
         :param box_threshold: filtering threshold for bbox
         :param text_threshold: filtering threshold for text
         """
-        root_path = Path(root_path)
+        raise NotImplementedError(
+            "Download checkpoint/config locally: prev in /rl_benchmark/grounded-sam"
+        )
+
         self.config = root_path / self.CONFIGS[model_variant]
         self.checkpoint = root_path / self.CHECKPOINTS[model_variant]
         self.model_variant = model_variant
