@@ -6,9 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "vision_lab"
 version = "0.0.0"
 dependencies = [
-  "numpy",
+  "numpy<2.0",
   "pillow",
-  "scipy",
+  "scipy>=1.10.0",
   "torch",
   "torchvision",
   "transformers>=4.35.2",  # OwlViT
