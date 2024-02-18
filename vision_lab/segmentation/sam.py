@@ -1,11 +1,13 @@
 # python3 -m pip install git+https://github.com/facebookresearch/segment-anything.git
+import os
 from pathlib import Path
 from typing import List, Tuple, Union
 
+import gdown
 import numpy as np
 import torch
-from segment_anything import sam_model_registry
-from segment_anything.utils.transforms import ResizeLongestSide
+from segment_anything import sam_model_registry  # type: ignore
+from segment_anything.utils.transforms import ResizeLongestSide  # type: ignore
 
 from ..utils.io import load_image_arrays
 from ..utils.timer import timer
@@ -14,10 +16,27 @@ from ..utils.timer import timer
 class SAM:
     """SAM for object segmentation"""
 
-    CHECKPOINTS = {
-        "vit_b": "models/sam_vit_b_01ec64.pth",
-        "vit_l": "models/sam_vit_l_0b3195.pth",
-        "vit_h": "models/sam_vit_h_4b8939.pth",
+    CKPT_DIR = Path(os.getenv("SAM_CKPT_DIR", Path.home() / "checkpoints/SAM"))
+
+    CKPT_PATHS = {
+        "vit_b": CKPT_DIR / "sam_vit_b_01ec64.pth",
+        "vit_l": CKPT_DIR / "sam_vit_l_0b3195.pth",
+        "vit_h": CKPT_DIR / "sam_vit_h_4b8939.pth",
+    }
+
+    CKPT_GDOWN_PARAMS = {
+        "vit_b": {
+            "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
+            "hash": "md5:01ec64d29a2fca3f0661936605ae66f8",
+        },
+        "vit_l": {
+            "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth",
+            "hash": "md5:0b3195507c641ddb6910d2bb5adee89c",
+        },
+        "vit_h": {
+            "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth",
+            "hash": "md5:4b8939a88964f0f4ff5f5b2642c598a6",
+        },
     }
 
     def __init__(
@@ -25,11 +44,7 @@ class SAM:
         model_variant="vit_h",
         device="cuda",
     ):
-        raise NotImplementedError(
-            "Download checkpoint locally: prev in /rl_benchmark/grounded-sam"
-        )
-
-        self.checkpoint = root_path / self.CHECKPOINTS[model_variant]
+        self.ckpt_path = self.CKPT_PATHS[model_variant]
         self.model_variant = model_variant
 
         self.device = device
@@ -38,7 +53,13 @@ class SAM:
 
     @timer
     def load_model(self):
-        self.model = sam_model_registry[self.model_variant](checkpoint=self.checkpoint)
+        # Download checkpoint if not found
+        gdown.cached_download(
+            path=self.ckpt_path,
+            **self.CKPT_GDOWN_PARAMS[self.model_variant],  # type: ignore
+        )
+
+        self.model = sam_model_registry[self.model_variant](checkpoint=self.ckpt_path)
         self.resize_transform = ResizeLongestSide(self.model.image_encoder.img_size)
 
         self.model = self.model.to(self.device)
