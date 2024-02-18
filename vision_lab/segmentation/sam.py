@@ -6,6 +6,7 @@ from typing import List, Tuple, Union
 import gdown
 import numpy as np
 import torch
+from real_robot.utils.logger import get_logger
 from segment_anything import sam_model_registry  # type: ignore
 from segment_anything.utils.transforms import ResizeLongestSide  # type: ignore
 
@@ -39,11 +40,15 @@ class SAM:
         },
     }
 
+    logger = get_logger("SAM")
+
     def __init__(
         self,
         model_variant="vit_h",
         device="cuda",
     ):
+        self.logger.info('Using SAM model variant: "%s"', model_variant)
+
         self.ckpt_path = self.CKPT_PATHS[model_variant]
         self.model_variant = model_variant
 
