@@ -1,7 +1,9 @@
 # python3 -m pip install git+https://github.com/facebookresearch/segment-anything.git
+from __future__ import annotations
+
 import os
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import Optional
 
 import gdown
 import numpy as np
@@ -74,14 +76,23 @@ class SAM:
     @torch.no_grad()
     def __call__(
         self,
-        images: Union[str, List[str], np.ndarray, List[np.ndarray]],
-        boxes: Union[torch.Tensor, np.ndarray, List[torch.Tensor], List[np.ndarray]],
+        images: str | list[str] | np.ndarray | list[np.ndarray],
+        boxes: Optional[
+            torch.Tensor | np.ndarray | list[torch.Tensor] | list[np.ndarray]
+        ] = None,
+        *,
+        points: Optional[
+            torch.Tensor | np.ndarray | list[torch.Tensor] | list[np.ndarray]
+        ] = None,
+        point_labels: Optional[
+            int | torch.Tensor | np.ndarray | list[torch.Tensor] | list[np.ndarray]
+        ] = None,
         return_on_cpu=False,
         verbose=False,
-    ) -> Union[
-        Tuple[torch.Tensor, Union[np.float32, np.ndarray]],
-        Tuple[List[torch.Tensor], List[np.ndarray]],
-    ]:
+    ) -> (
+        tuple[torch.Tensor, np.float32 | np.ndarray]
+        | tuple[list[torch.Tensor], list[np.ndarray]]
+    ):
         """
         :param images: Input RGB images, can be
                        a string path, a list of string paths,
@@ -89,25 +100,47 @@ class SAM:
                        a list of [H, W, 3] np.uint8 np.ndarray,
                        a [n_images, H, W, 3] np.uint8 np.ndarray
         :param boxes: (n_images) list of pred_bbox as XYXY pixel coordinates
-                      [n_bbox, 4] torch.float32 cuda Tensor
+                      [B, 4] or [4,] int/float32 np.ndarray/torch.Tensor
+        :param points: (n_images) list of point prompts as XY pixel coordinates
+                       [B, n_points, 2] or [n_points, 2] or [2,]
+                       int/float32 np.ndarray/torch.Tensor
+        :param point_labels: (n_images) list of point prompt labels.
+                             1 is foreground, 0 is background.
+                             [B, n_points] or [n_points,] int np.ndarray/torch.Tensor
         :param return_on_cpu: whether to return masks as cuda Tensor or numpy array
         :param verbose: whether to print debug info
         :return masks: (n_images) list of predicted mask
-                       [n_bbox, H, W] or [H, W] torch.bool cuda Tensor
-        :return pred_ious: (n_images) list of [n_bbox,] or () np.float32 np.ndarray
+                       [B, H, W] or [H, W] torch.bool cuda Tensor
+        :return pred_ious: (n_images) list of [B,] or () np.float32 np.ndarray
         """
         masks, pred_ious = [], []
+        assert boxes is not None or points is not None, "Need boxes or points prompt"
 
         with torch.cuda.device(self.device):
             # Process images and boxes
-            images, is_list = load_image_arrays(images)
-            if is_single_box := not isinstance(boxes, list):
-                is_single_box = boxes.ndim == 1  # boxes has shape [4,]
-                boxes = [boxes]
-            assert len(images) == len(boxes), f"{len(images) = } {len(boxes) = }"
+            images, multiple_images = load_image_arrays(images)
+            if boxes is not None:
+                # list[array[4,]], list[array[B, 4]]
+                # array[4,], array[B, 4], array[n_images, B, 4]
+                if squeeze_return := not isinstance(boxes, list):
+                    squeeze_return = boxes.ndim == 1  # boxes has shape [4,]
+                    if boxes.ndim < 3:
+                        boxes = [boxes]  # type: ignore
+                assert len(images) == len(boxes), f"{len(images) = } {len(boxes) = }"  # type: ignore
+            if points is not None:
+                assert point_labels is not None, "Need point_labels for point prompts"
+                # list[array[2,]], list[array[N, 2]], list[array[B, N, 2]]
+                # array[2,], array[N, 2], array[B, N, 2], array[n_images, B, N, 2]
+                if squeeze_return := not isinstance(points, list):
+                    squeeze_return = points.ndim in [1, 2]  # [2,] or [N, 2]
+                    if points.ndim < 4:
+                        points, point_labels = [points], [point_labels]  # type: ignore
+                assert (
+                    len(images) == len(points) == len(point_labels)  # type: ignore
+                ), f"{len(images) = } {len(points) = } {len(point_labels) = }"  # type: ignore
 
             # run SAM model on 1-image batch (on 11GB GPU)
-            for image, box in zip(images, boxes):
+            for i, image in enumerate(images):
                 image_shape = image.shape[:2]
 
                 processed_image = self.resize_transform.apply_image(image)
@@ -117,26 +150,49 @@ class SAM:
                     .contiguous()
                 )
 
-                output = self.model(
-                    [
-                        {
-                            "image": processed_image,
-                            "boxes": self.resize_transform.apply_boxes_torch(
-                                torch.as_tensor(box, device=self.device), image_shape
-                            ),
-                            "original_size": image_shape,
-                        }
-                    ],
-                    multimask_output=False,
-                )[0]
+                input_dict = {"image": processed_image, "original_size": image_shape}
+                batch_size = -1
+                if boxes is not None:
+                    input_dict["boxes"] = boxes_torch = (
+                        self.resize_transform.apply_boxes_torch(
+                            torch.as_tensor(boxes[i], device=self.device), image_shape
+                        )
+                    )
+                    batch_size = len(boxes_torch)
+                if points is not None:
+                    point, point_label = points[i], point_labels[i]  # type: ignore
+                    if point.ndim == 1:
+                        point = point[None, None, :]  # [1, 1, 2]
+                        point_label = np.asarray(point_label).reshape(1, -1)  # [1, 1]
+                    elif point.ndim == 2:
+                        point = point[None, ...]  # [1, N, 2]
+                        point_label = np.asarray(point_label).reshape(1, -1)  # [1, N]
+                    input_dict["point_coords"] = (
+                        self.resize_transform.apply_coords_torch(
+                            torch.as_tensor(point, device=self.device), image_shape
+                        )
+                    )
+                    input_dict["point_labels"] = torch.as_tensor(
+                        point_label, device=self.device
+                    )
+                    assert batch_size == -1 or batch_size == len(point) == len(
+                        point_label
+                    ), (
+                        f"Mismatch batch_size {batch_size = } "
+                        f"{len(point) = } {len(point_label) = }"
+                    )
+
+                output = self.model([input_dict], multimask_output=False)[0]
 
                 mask = output["masks"].squeeze(1)
                 mask = mask.cpu().numpy() if return_on_cpu else mask
                 pred_iou = output["iou_predictions"].cpu().numpy()[:, 0]
                 # output["low_res_logits"] has shape [n_bbox, 1, 256, 256]
 
-                if not is_list:
-                    return (mask[0], pred_iou[0]) if is_single_box else (mask, pred_iou)
+                if not multiple_images:  # single input image
+                    return (
+                        (mask[0], pred_iou[0]) if squeeze_return else (mask, pred_iou)
+                    )
 
                 masks.append(mask)
                 pred_ious.append(pred_iou)
