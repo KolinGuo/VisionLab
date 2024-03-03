@@ -13,7 +13,7 @@ dependencies = [
   "torchvision",
   "transformers>=4.35.2",  # OwlViT
   "real-robot",  # logger
-  "gdown",  # downloading checkpoints
+  "gdown>=5.1.0",  # downloading checkpoints
 ]
 requires-python = ">=3.8"
 description = "Collection of computer vision tools"
