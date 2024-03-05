@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=62.3.0"]
+requires = ["setuptools>=62.3.0", "setuptools-git-versioning<2"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "vision_lab"
-version = "0.0.0"
+dynamic = ["version"]
 dependencies = [
   "numpy<2.0",
   "pillow",
@@ -19,6 +19,14 @@ requires-python = ">=3.8"
 description = "Collection of computer vision tools"
 readme = "README.md"
 license = {file = "LICENSE"}
+
+[tool.setuptools-git-versioning]
+enabled = true
+version_file = "VERSION"
+count_commits_from_version_file = true
+dev_template = "{tag}.dev{timestamp:%Y%m%d}+git.{sha}"
+dirty_template = "{tag}.dev{timestamp:%Y%m%d}+git.{sha}.dirty"
+tag_filter = "v.*"
 
 [tool.ruff]
 line-length = 88
