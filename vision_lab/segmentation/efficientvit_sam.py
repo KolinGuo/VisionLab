@@ -1,4 +1,5 @@
-# python3 -m pip install git+https://github.com/facebookresearch/segment-anything.git
+# https://github.com/xuanlinli17/efficientvit
+# https://github.com/xuanlinli17/efficientvit/blob/master/applications/sam.md
 from __future__ import annotations
 
 import os
@@ -9,47 +10,51 @@ import gdown
 import numpy as np
 import torch
 from real_robot.utils.logger import get_logger
-from segment_anything import sam_model_registry  # type: ignore
-from segment_anything.utils.transforms import ResizeLongestSide  # type: ignore
+from efficientvit.sam_model_zoo import create_sam_model
+from efficientvit.models.efficientvit.sam import EfficientViTSamPredictor  # type: ignore
 
 from ..utils.io import load_image_arrays
 from ..utils.timer import timer
 
 
-class SAM:
+class EfficientViT_SAM:
     """SAM for object segmentation"""
 
-    CKPT_DIR = Path(os.getenv("SAM_CKPT_DIR", Path.home() / "checkpoints/SAM"))
+    CKPT_DIR = Path(os.getenv("EFFICIENTVIT_SAM_CKPT_DIR", Path.home() / "checkpoints/EfficientViT_SAM"))
 
     CKPT_PATHS = {
-        "vit_b": CKPT_DIR / "sam_vit_b_01ec64.pth",
-        "vit_l": CKPT_DIR / "sam_vit_l_0b3195.pth",
-        "vit_h": CKPT_DIR / "sam_vit_h_4b8939.pth",
+        "l0": CKPT_DIR / "l0.pt",
+        "l1": CKPT_DIR / "l1.pt",
+        "l2": CKPT_DIR / "l2.pt",
+        "xl0": CKPT_DIR / "xl0.pt",
+        "xl1": CKPT_DIR / "xl1.pt",
     }
 
     CKPT_GDOWN_PARAMS = {
-        "vit_b": {
-            "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
-            "hash": "md5:01ec64d29a2fca3f0661936605ae66f8",
+        "l0": {
+            "url": "https://huggingface.co/han-cai/efficientvit-sam/resolve/main/l0.pt",
         },
-        "vit_l": {
-            "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth",
-            "hash": "md5:0b3195507c641ddb6910d2bb5adee89c",
+        "l1": {
+            "url": "https://huggingface.co/han-cai/efficientvit-sam/resolve/main/l1.pt",
         },
-        "vit_h": {
-            "url": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth",
-            "hash": "md5:4b8939a88964f0f4ff5f5b2642c598a6",
+        "l2": {
+            "url": "https://huggingface.co/han-cai/efficientvit-sam/resolve/main/l2.pt",
+        },
+        "xl0": {
+            "url": "https://huggingface.co/han-cai/efficientvit-sam/resolve/main/xl0.pt",
+        },
+        "xl1": {
+            "url": "https://huggingface.co/han-cai/efficientvit-sam/resolve/main/xl1.pt",
         },
     }
-
-    logger = get_logger("SAM")
+    logger = get_logger("EfficientViT_SAM")
 
     def __init__(
         self,
-        model_variant="vit_h",
+        model_variant="xl0",
         device="cuda",
     ):
-        self.logger.info('Using SAM model variant: "%s"', model_variant)
+        self.logger.info('Using EfficientViT-SAM model variant: "%s"', model_variant)
 
         self.ckpt_path = self.CKPT_PATHS[model_variant]
         self.model_variant = model_variant
@@ -66,11 +71,8 @@ class SAM:
             **self.CKPT_GDOWN_PARAMS[self.model_variant],  # type: ignore
         )
 
-        self.model = sam_model_registry[self.model_variant](checkpoint=self.ckpt_path)
-        self.resize_transform = ResizeLongestSide(self.model.image_encoder.img_size)
-
-        self.model = self.model.to(self.device)
-        self.model.eval()
+        self.model = create_sam_model(self.model_variant, True, self.ckpt_path).to(self.device).eval()
+        self.predictor = EfficientViTSamPredictor(self.model)
 
     @timer
     @torch.no_grad()
@@ -105,7 +107,7 @@ class SAM:
                        [B, n_points, 2] or [n_points, 2] or [2,]
                        int/float32 np.ndarray/torch.Tensor
         :param point_labels: (n_images) list of point prompt labels.
-                             1 is foreground, 0 is background.
+                             1 is foreground, 0 is background, -1 is ignored.
                              [B, n_points] or [n_points,] int np.ndarray/torch.Tensor
         :param return_on_cpu: whether to return masks as cuda Tensor or numpy array
         :param verbose: whether to print debug info
@@ -141,26 +143,10 @@ class SAM:
                     len(images) == len(points) == len(point_labels)  # type: ignore
                 ), f"{len(images) = } {len(points) = } {len(point_labels) = }"  # type: ignore
 
-            # run SAM model on 1-image batch (on 11GB GPU)
+            # run EfficientViT-SAM model on 1-image batch
             for i, image in enumerate(images):
-                image_shape = image.shape[:2]
+                self.predictor.set_image(image)
 
-                processed_image = self.resize_transform.apply_image(image)
-                processed_image = (
-                    torch.as_tensor(processed_image, device=self.device)
-                    .permute(2, 0, 1)
-                    .contiguous()
-                )
-
-                input_dict = {"image": processed_image, "original_size": image_shape}
-                batch_size = -1
-                if boxes is not None:
-                    input_dict["boxes"] = boxes_torch = (
-                        self.resize_transform.apply_boxes_torch(
-                            torch.as_tensor(boxes[i], device=self.device), image_shape
-                        )
-                    )
-                    batch_size = len(boxes_torch)
                 if points is not None:
                     point, point_label = points[i], point_labels[i]  # type: ignore
                     if point.ndim == 1:
@@ -169,27 +155,34 @@ class SAM:
                     elif point.ndim == 2:
                         point = point[None, ...]  # [1, N, 2]
                         point_label = np.asarray(point_label).reshape(1, -1)  # [1, N]
-                    input_dict["point_coords"] = (
-                        self.resize_transform.apply_coords_torch(
-                            torch.as_tensor(point, device=self.device), image_shape
-                        )
+                    
+                    assert len(point) == len(point_label), (
+                        f"Mismatch {len(point) = } {len(point_label) = }"
                     )
-                    input_dict["point_labels"] = torch.as_tensor(
-                        point_label, device=self.device
+                    point = self.predictor.apply_coords(point)
+                    point_torch = torch.as_tensor(point, dtype=torch.float, device=self.device)
+                    point_label_torch = torch.as_tensor(point_label, dtype=torch.int, device=self.device)
+                    mask, pred_iou, _ = self.predictor.predict_torch(
+                        point_coords=point_torch,
+                        point_labels=point_label_torch,
+                        multimask_output=False,
                     )
-                    assert batch_size == -1 or batch_size == len(point) == len(
-                        point_label
-                    ), (
-                        f"Mismatch batch_size {batch_size = } "
-                        f"{len(point) = } {len(point_label) = }"
+                elif boxes is not None:
+                    box = boxes[i]
+                    if box.ndim == 1:
+                        box = box[None, :]  # [1, 4]
+                    box = self.predictor.apply_boxes(box)
+                    box_torch = torch.as_tensor(box, dtype=torch.float, device=self.device)
+                    mask, pred_iou, _ = self.predictor.predict_torch(
+                        point_coords=None,
+                        point_labels=None,
+                        boxes=box_torch,
+                        multimask_output=False,
                     )
 
-                output = self.model([input_dict], multimask_output=False)[0]
-
-                mask = output["masks"].squeeze(1)
+                mask = mask.squeeze(1) # [1, 1, H, W] -> [1, H, W]
                 mask = mask.cpu().numpy() if return_on_cpu else mask
-                pred_iou = output["iou_predictions"].cpu().numpy()[:, 0]
-                # output["low_res_logits"] has shape [n_bbox, 1, 256, 256]
+                pred_iou = pred_iou.cpu().numpy()[:, 0] # [1, 1] -> [1]
 
                 if not multiple_images:  # single input image
                     return (

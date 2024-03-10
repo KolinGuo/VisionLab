@@ -9,3 +9,8 @@ try:
     from .owl_vit import Owl_ViT
 except ImportError as e:
     get_logger("VisionLab").warning(f"Failed to import Owl_ViT: {e}")
+
+try:
+    from .nanoowl import NanoOwl
+except ImportError as e:
+    get_logger("VisionLab").warning(f"Failed to import NanoOwl: {e}")
