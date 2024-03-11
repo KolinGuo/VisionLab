@@ -124,12 +124,21 @@ class NanoOwl:
             nms_threshold=self.nms_threshold,
             pad_square=False
         )
-        boxes, pred_indices, pred_scores = output.boxes, output.labels.cpu().numpy(), output.scores.cpu().numpy()
+        boxes, pred_indices, pred_scores, input_indices = (
+            output.boxes, output.labels.cpu().numpy(), output.scores.cpu().numpy(), output.input_indices.cpu().numpy()
+        )
         if return_on_cpu:
             boxes = boxes.cpu().numpy()
 
+        ret_boxes, ret_pred_indices, ret_pred_scores = [], [], []
+        for i in range(len(images)):
+            indices = (input_indices == i)
+            ret_boxes.append(boxes[indices])
+            ret_pred_indices.append(pred_indices[indices])
+            ret_pred_scores.append(pred_scores[indices])
+
         if not is_list:
             # remove batch dimension
-            boxes, pred_indices, pred_scores = boxes[0], pred_indices[0], pred_scores[0]
+            ret_boxes, ret_pred_indices, ret_pred_scores = ret_boxes[0], ret_pred_indices[0], ret_pred_scores[0]
         
-        return boxes, pred_indices, pred_scores
+        return ret_boxes, ret_pred_indices, ret_pred_scores

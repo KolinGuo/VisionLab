@@ -37,7 +37,7 @@ class EfficientViT_SAM_TensorRT:
         max_point_box_batch_num=8,
         device="cuda",
     ):
-        self.logger.info('Using EfficientViT-SAM-TensorRT model variant: "%s", model_variant')
+        self.logger.info('Using EfficientViT-SAM-TensorRT model variant: "%s"', model_variant)
         assert model_variant in self.CKPT_TYPES, f"{model_variant = }"
         self.model_variant = model_variant
         self.max_point_box_batch_num = max_point_box_batch_num
