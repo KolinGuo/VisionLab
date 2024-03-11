@@ -34,18 +34,13 @@ class EfficientViT_SAM_TensorRT:
     def __init__(
         self,
         model_variant="xl0",
-        prompt_mode="points",
         max_point_box_batch_num=8,
-        max_points_per_prompt=1,
         device="cuda",
     ):
-        self.logger.info('Using EfficientViT-SAM-TensorRT model variant: "%s"; prompt mode: "%s"', model_variant, prompt_mode)
+        self.logger.info('Using EfficientViT-SAM-TensorRT model variant: "%s", model_variant')
         assert model_variant in self.CKPT_TYPES, f"{model_variant = }"
-        assert prompt_mode in ["points", "boxes"], f"{prompt_mode = }"
         self.model_variant = model_variant
-        self.prompt_mode = prompt_mode
         self.max_point_box_batch_num = max_point_box_batch_num
-        self.max_points_per_prompt = max_points_per_prompt
 
         # setup cuda context
         assert "cuda" in device, "cpu inference is not supported"
@@ -121,21 +116,19 @@ class EfficientViT_SAM_TensorRT:
         Here B is the number of masks per image.
         """
         masks, pred_ious = [], []
-        assert boxes is not None or points is not None, "Need boxes or points prompt"
+        assert (boxes is not None) or (points is not None), "Need boxes or points prompt"
 
         # Process images and boxes
         images, multiple_images = load_image_arrays(images)
         if boxes is not None:
             # list[array[4,]], list[array[B, 4]]
             # array[4,], array[B, 4], array[n_images, B, 4]
-            assert self.prompt_mode == "boxes"
             if squeeze_return := not isinstance(boxes, list):
                 squeeze_return = boxes.ndim == 1  # boxes has shape [4,]
                 if boxes.ndim < 3:
                     boxes = [boxes]  # type: ignore
             assert len(images) == len(boxes), f"{len(images) = } {len(boxes) = }"  # type: ignore
         if points is not None:
-            assert self.prompt_mode == "points"
             assert point_labels is not None, "Need point_labels for point prompts"
             # list[array[2,]], list[array[N, 2]], list[array[B, N, 2]]
             # array[2,], array[N, 2], array[B, N, 2], array[n_images, B, N, 2]
@@ -156,6 +149,7 @@ class EfficientViT_SAM_TensorRT:
                 image = preprocess(image, img_size=1024, device=self.device)
             else:
                 raise NotImplementedError
+            assert image.dtype == torch.float32, f"{image.dtype = }"
             image_embedding = self.encoder_engine(image)
             image_embedding = image_embedding[0].reshape(1, 256, 64, 64)
 
@@ -169,15 +163,18 @@ class EfficientViT_SAM_TensorRT:
                 elif point.ndim == 2:
                     point = point[None, ...]  # [1, N, 2]
                     point_label = np.asarray(point_label).reshape(1, -1)  # [1, N]
+                point_label = point_label.astype(np.float32)
                 
+                # if point.shape[1] == 1:
+                #     # pad a dummy point
+                #     point = np.concatenate([point, np.zeros([point.shape[0], 1, 2])], axis=1)
+                #     point_label = np.concatenate([point_label, -1 * np.ones([point_label.shape[0], 1])], axis=1)
+
                 assert len(point) == len(point_label), (
                     f"Mismatch {len(point) = } {len(point_label) = }"
                 )
                 assert len(point) <= self.max_point_box_batch_num, (
                     f"Number of prompts {len(point) = } is more than the predetermined batch size {self.max_point_box_batch_num = }"
-                )
-                assert point.shape[1] <= self.max_points_per_prompt, (
-                    f"Number of points per prompt {point.shape[1] = } is more than the predetermined value {self.max_points_per_prompt = }"
                 )
                 point = apply_coords(point, origin_image_size, input_size).astype(np.float32)
 
@@ -194,6 +191,7 @@ class EfficientViT_SAM_TensorRT:
                 )
 
             inputs = (image_embedding, torch.from_numpy(point).to(self.device), torch.from_numpy(point_label).to(self.device))
+            assert all([x.dtype == torch.float32 for x in inputs]), f"{[x.dtype for x in inputs] = }" # type checking is important for TRT inference since TRT doesn't check it...
             low_res_mask, pred_iou = self.decoder_engine(*inputs)
             low_res_mask = low_res_mask.reshape(1, -1, 256, 256)
 
