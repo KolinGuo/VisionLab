@@ -34,8 +34,8 @@ class NanoOwl:
     def __init__(
         self,
         model_variant="google/owlv2-large-patch14-ensemble",
-        box_threshold=0.1,
-        nms_threshold=1.0,
+        box_threshold=0.2,
+        nms_threshold=0.3,
         max_image_batch_size=1,
         device="cuda",
     ):
